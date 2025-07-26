@@ -6,6 +6,7 @@
       "dependencies": {
         "@elysiajs/cors": "^1.3.3",
         "@elysiajs/static": "^1.3.0",
+        "@tqman/nice-logger": "^1.1.1",
         "dayjs": "^1.11.13",
         "dotenv": "^17.2.1",
         "elysia": "latest",
@@ -132,6 +133,8 @@
     "@tokenizer/inflate": ["@tokenizer/inflate@0.2.7", "", { "dependencies": { "debug": "^4.4.0", "fflate": "^0.8.2", "token-types": "^6.0.0" } }, "sha512-MADQgmZT1eKjp06jpI2yozxaU9uVs4GzzgSL+uEq7bVcJ9V1ZXQkeGNql1fsSI0gMy1vhvNTNbUqrx+pZfJVmg=="],
 
     "@tokenizer/token": ["@tokenizer/token@0.3.0", "", {}, "sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A=="],
+
+    "@tqman/nice-logger": ["@tqman/nice-logger@1.1.1", "", { "dependencies": { "picocolors": "^1.1.1" }, "peerDependencies": { "elysia": ">=1.2.0" } }, "sha512-/0PWFNXaUE3Lx9IQ8O0aurH+PW7x9GrCK/WyY4vVVWPz+fShijmt9vPCHLI226AZvwVfvU4BOIrQdCqzsBgeVg=="],
 
     "@tsconfig/node10": ["@tsconfig/node10@1.0.11", "", {}, "sha512-DcRjDCujK/kCk/cUe8Xz8ZSpm8mS3mNNpta+jGCA6USEDfktlNvm1+IuZ9eTcDbNk41BHwpHHeW+N1lKCz4zOw=="],
 
