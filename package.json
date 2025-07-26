@@ -19,7 +19,7 @@
     "parse-duration": "^2.1.4"
   },
   "devDependencies": {
-    "@eslint/js": "^9.31.0",
+    "@eslint/js": "^9.32.0",
     "@u3u/prettier-config": "^5.2.0",
     "bun-types": "latest",
     "eslint-config-prettier": "^10.1.8",
