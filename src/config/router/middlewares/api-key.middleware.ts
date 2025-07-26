@@ -15,6 +15,8 @@ const DEFAULT_WHITELIST_PATHS = [
   '/health/status',
   '/favicon.ico',
   '/robots.txt',
+  '/waguri.gif',
+  '/test-image',
 ];
 
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -31,7 +33,12 @@ const getApiKeyFromEnv = (): string => {
 };
 
 const isWhitelistedPath = (path: string, method: string): boolean => {
-  return DEFAULT_WHITELIST_PATHS.includes(path) || (path === '/' && method === 'GET');
+  const staticAssetExtensions = ['.gif', '.png', '.jpg', '.jpeg', '.svg', '.css', '.js', '.ico', '.woff', '.woff2', '.ttf', '.eot'];
+  const hasStaticExtension = staticAssetExtensions.some(ext => path.toLowerCase().endsWith(ext));
+  
+  return DEFAULT_WHITELIST_PATHS.includes(path) || 
+         (path === '/' && method === 'GET') || 
+         hasStaticExtension;
 };
 
 export const createApiKeyMiddleware = (options: ApiKeyOptions = {}) => {
