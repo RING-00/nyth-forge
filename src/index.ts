@@ -1,13 +1,15 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { cors } from '@elysiajs/cors';
 import { staticPlugin } from '@elysiajs/static';
 import categoryController from '@modules/category/controller.category';
 import operatorController from '@modules/operator/controller.operator';
 import resultController from '@modules/result/controller.result';
 import templateController from '@modules/template/controller.template';
+import { logger } from '@tqman/nice-logger';
 import { miaw } from '@utils';
 import { config } from 'dotenv';
 import { Elysia } from 'elysia';
-import logixlysia from 'logixlysia';
 import { apiKeyHandler, camelCaseHandler, connectToDatabase, healthCheckRoute, snakeCaseHandler } from './config';
 import { WebSocketController, type WebSocketConnection } from './websockets';
 
@@ -22,21 +24,26 @@ async function startServer() {
     const wsController = new WebSocketController();
     const wsHandler = wsController.getHandler();
 
+    const publicPath = path.resolve(process.cwd(), 'public');
+    console.log(`Static files path: ${publicPath}`);
+    console.log(`Public directory exists: ${fs.existsSync(publicPath)}`);
+
+    const waguriPath = path.join(publicPath, 'waguri.gif');
+    console.log(`Waguri.gif path: ${waguriPath}`);
+    console.log(`Waguri.gif exists: ${fs.existsSync(waguriPath)}`);
+
     const app = new Elysia()
       .use(cors())
       .use(
         staticPlugin({
-          assets: 'public',
+          assets: publicPath,
           prefix: '/',
         }),
       )
       .use(
-        logixlysia({
-          config: {
-            showStartupMessage: false,
-            ip: true,
-            customLogFormat: '{status} {method} {pathname} {duration} {message} {ip}',
-          },
+        logger({
+          mode: 'combined',
+          withTimestamp: false,
         }),
       )
       .use(apiKeyHandler)
@@ -74,6 +81,26 @@ async function startServer() {
             'Content-Type': 'text/html; charset=utf-8',
           },
         });
+      })
+      .get('/waguri.gif', () => {
+        try {
+          const waguriPath = path.join(publicPath, 'waguri.gif');
+          if (fs.existsSync(waguriPath)) {
+            const file = Bun.file(waguriPath);
+            return new Response(file, {
+              headers: {
+                'Content-Type': 'image/gif',
+                'Cache-Control': 'public, max-age=31536000',
+              },
+            });
+          } else {
+            console.error(`Waguri.gif not found at: ${waguriPath}`);
+            return new Response('Image not found', { status: 404 });
+          }
+        } catch (error) {
+          console.error('Error serving waguri.gif:', error);
+          return new Response('Internal server error', { status: 500 });
+        }
       })
       .get('/favicon.ico', () => new Response(null, { status: 204 }))
       .listen(3000);
