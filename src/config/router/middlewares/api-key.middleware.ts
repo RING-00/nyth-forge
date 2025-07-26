@@ -6,6 +6,7 @@ import { StatusCodes } from 'http-status-codes';
 export interface ApiKeyOptions {
   exclude?: (path: string, method: string) => boolean;
   headerName?: string;
+  paramName?: string;
   onUnauthorized?: (request: { ip: string; path: string; method: string }) => void;
 }
 
@@ -45,6 +46,7 @@ export const createApiKeyMiddleware = (options: ApiKeyOptions = {}) => {
   const fullOptions: Required<ApiKeyOptions> = {
     exclude: isWhitelistedPath,
     headerName: 'x-api-key',
+    paramName: 'api-key',
     onUnauthorized: () => {},
     ...options,
   };
@@ -54,7 +56,8 @@ export const createApiKeyMiddleware = (options: ApiKeyOptions = {}) => {
   return new Elysia({ name: 'api-key-middleware' }).onBeforeHandle({ as: 'global' }, (context) => {
     try {
       const { request, headers } = context;
-      const path = new URL(request.url).pathname;
+      const url = new URL(request.url);
+      const path = url.pathname;
 
       if (fullOptions.exclude(path, request.method)) {
         return;
@@ -64,7 +67,7 @@ export const createApiKeyMiddleware = (options: ApiKeyOptions = {}) => {
         return handleUnauthorizedAccess(context, fullOptions, 'API key not configured');
       }
 
-      const providedApiKey = extractApiKey(headers, fullOptions.headerName);
+      const providedApiKey = extractApiKey(headers, url, fullOptions.headerName, fullOptions.paramName);
 
       if (!providedApiKey) {
         return handleUnauthorizedAccess(context, fullOptions, 'API key missing');
@@ -92,7 +95,17 @@ const getClientIp = (headers: Record<string, string | undefined>): string => {
   );
 };
 
-const extractApiKey = (headers: Record<string, string | undefined>, headerName: string): string | undefined => {
+const extractApiKey = (
+  headers: Record<string, string | undefined>, 
+  url: URL, 
+  headerName: string, 
+  paramName: string
+): string | undefined => {
+  const urlApiKey = url.searchParams.get(paramName);
+  if (urlApiKey) {
+    return urlApiKey;
+  }
+
   const authHeader = headers.authorization || headers[headerName.toLowerCase()];
 
   if (!authHeader) {
@@ -111,6 +124,14 @@ const handleUnauthorizedAccess = (
   const { request, set, headers } = context;
   const path = new URL(request.url).pathname;
   const ip = getClientIp(headers);
+
+  console.warn(`Unauthorized access attempt: ${reason}`, {
+    ip,
+    path,
+    method: request.method,
+    userAgent: headers['user-agent'] || 'unknown',
+    timestamp: new Date().toISOString(),
+  });
 
   try {
     options.onUnauthorized({ ip, path, method: request.method });
