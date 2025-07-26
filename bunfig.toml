@@ -1,0 +1,10 @@
+[build]
+tsconfig = "./tsconfig.json"
+
+[build.alias]
+"@base" = "./src/common/base"
+"@config" = "./src/config/index.ts"
+"@consts" = "./src/common/constants/index.ts"
+"@modules" = "./src/modules"
+"@types" = "./src/common/types/index.ts"
+"@utils" = "./src/common/utils/index.ts"
