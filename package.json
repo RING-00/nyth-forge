@@ -4,6 +4,8 @@
   "module": "src/index.js",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
+    "build": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile server ./src/index.ts",
+    "start": "./server",
     "format": "prettier --write .",
     "lint": "eslint --ext .ts ."
   },
