@@ -400,11 +400,20 @@ export const parseFieldSelection = (
   if (!fieldsParam) {
     return [];
   }
+  
+  const PRESERVE_CASE_FIELDS = ['createdAt', 'updatedAt'];
+  
   const fields = fieldsParam
     .split(',')
     .map((field) => field.trim())
     .filter(Boolean)
-    .map((field) => toSnakeCase(field));
+    .map((field) => {
+      if (PRESERVE_CASE_FIELDS.includes(field)) {
+        return field;
+      }
+      return toSnakeCase(field);
+    });
+  
   if (allowedFields) {
     validateFieldSelection(fields, allowedFields, entityName);
   }
