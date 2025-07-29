@@ -22,6 +22,7 @@ export class WebSocketController {
       .get('/clients', this.getClients)
       .get('/stats', this.getStats)
       .get('/cache-info', this.getCacheInfo)
+      .get('/redis-data', this.getRedisData)
       .post('/clear-cache', this.clearCache)
       .post('/cleanup', this.cleanup);
   };
@@ -127,6 +128,69 @@ export class WebSocketController {
       },
       'WebSocket cleanup completed successfully',
       'Failed to cleanup WebSocket',
+    );
+
+  private getRedisData = () =>
+    this.handleRequest(
+      async () => {
+        const { redisService } = await import('@config');
+        
+        const timestamp = new Date().toISOString();
+        const isConnected = redisService.getConnectionStatus();
+        
+        if (!isConnected) {
+          return {
+            redis_connected: false,
+            keys: [],
+            total_keys: 0,
+            timestamp,
+          };
+        }
+        const keys = await redisService.keys('*');
+
+        const keyDetails = [];
+        for (const key of keys.slice(0, 50)) {
+          try {
+            const type = await redisService.type(key);
+            const ttl = await redisService.ttl(key);
+            let value = null;
+
+            const stringValue = await redisService.getRawValue(key);
+            if (stringValue) {
+              try {
+                value = JSON.parse(stringValue);
+              } catch {
+                value = stringValue;
+              }
+            }
+
+            keyDetails.push({
+              key,
+              type,
+              ttl: ttl >= 0 ? ttl : null,
+              ttl_formatted: ttl >= 0 ? formatDuration(ttl * 1000) : 'no expiration',
+              value,
+              size: stringValue?.length || 0,
+            });
+          } catch (error) {
+            keyDetails.push({
+              key,
+              type: 'error',
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
+
+        return {
+          redis_connected: true,
+          keys: keyDetails,
+          total_keys: keys.length,
+          displayed_keys: keyDetails.length,
+          timestamp,
+        };
+      },
+      'Redis data retrieved successfully',
+      'Failed to get Redis data',
     );
 
   private async handleRequest<T extends object>(
