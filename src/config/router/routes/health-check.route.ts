@@ -1,4 +1,5 @@
 import { createServiceError, errorResponse, successResponse } from '@base/service.base';
+import { redisService } from '@config';
 import type { ErrorCode } from '@types';
 import { Elysia, type Context } from 'elysia';
 import { StatusCodes } from 'http-status-codes';
@@ -12,18 +13,21 @@ const healthCheckRoute = new Elysia({
   .get('/', ({ set }) => {
     try {
       const dbStatus = getDatabaseStatus();
+      const redisStatus = redisService.getConnectionStatus();
 
-      if (!dbStatus.isConnected) {
+      const isHealthy = dbStatus.isConnected && redisStatus;
+
+      if (!isHealthy) {
         set.status = StatusCodes.SERVICE_UNAVAILABLE;
         return errorResponse(
-          'Service is not healthy due to database disconnection.',
+          'Service is not healthy due to service dependencies failure.',
           StatusCodes.SERVICE_UNAVAILABLE,
           'SERVICE_UNAVAILABLE' as ErrorCode,
-          createUnhealthyData(dbStatus),
+          createUnhealthyData(dbStatus, redisStatus),
         );
       }
 
-      return successResponse(createHealthData(dbStatus), 'System health check successful.');
+      return successResponse(createHealthData(dbStatus, redisStatus), 'System health check successful.');
     } catch (error) {
       return handleHealthCheckError(error, set, '/health');
     }
@@ -32,11 +36,13 @@ const healthCheckRoute = new Elysia({
   .get('/status', ({ set }) => {
     try {
       const dbStatus = getDatabaseStatus();
+      const redisStatus = redisService.getConnectionStatus();
 
       return successResponse(
         {
-          status: dbStatus.isConnected ? 'ok' : 'error',
+          status: dbStatus.isConnected && redisStatus ? 'ok' : 'error',
           database: dbStatus.status,
+          redis: redisStatus ? 'connected' : 'disconnected',
           timestamp: new Date().toISOString(),
         },
         'Quick status check completed.',
@@ -48,7 +54,7 @@ const healthCheckRoute = new Elysia({
 
 export default healthCheckRoute;
 
-const createHealthData = (dbStatus: ReturnType<typeof getDatabaseStatus>) => ({
+const createHealthData = (dbStatus: ReturnType<typeof getDatabaseStatus>, redisStatus: boolean) => ({
   status: 'healthy',
   timestamp: new Date().toISOString(),
   uptime: process.uptime(),
@@ -62,15 +68,25 @@ const createHealthData = (dbStatus: ReturnType<typeof getDatabaseStatus>) => ({
       readyState: dbStatus.readyState,
       databaseName: dbStatus.databaseName,
     },
+    redis: {
+      status: redisStatus ? 'operational' : 'error',
+      isConnected: redisStatus,
+    },
   },
 });
 
-const createUnhealthyData = (dbStatus: ReturnType<typeof getDatabaseStatus>) => ({
+const createUnhealthyData = (dbStatus: ReturnType<typeof getDatabaseStatus>, redisStatus: boolean) => ({
   timestamp: new Date().toISOString(),
-  database: {
-    status: dbStatus.status,
-    isConnected: dbStatus.isConnected,
-    readyState: dbStatus.readyState,
+  services: {
+    database: {
+      status: dbStatus.status,
+      isConnected: dbStatus.isConnected,
+      readyState: dbStatus.readyState,
+    },
+    redis: {
+      status: redisStatus ? 'operational' : 'error',
+      isConnected: redisStatus,
+    },
   },
 });
 
