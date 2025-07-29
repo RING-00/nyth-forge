@@ -11,7 +11,8 @@
       "@consts": ["./src/common/constants/index"],
       "@modules/*": ["./src/modules/*"],
       "@types": ["./src/common/types/index"],
-      "@utils": ["./src/common/utils/index"]
+      "@utils": ["./src/common/utils/index"],
+      "@websockets": ["./src/websockets"]
     },
     "skipLibCheck": true,
     "strict": true,

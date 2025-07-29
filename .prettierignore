@@ -2,6 +2,7 @@ build
 coverage
 jsonsource
 node_modules
+.imgbotconfig
 .next
 .husky
 .prettierignore
