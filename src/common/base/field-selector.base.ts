@@ -1,3 +1,4 @@
+import { toSnakeCase } from '@utils';
 import { StatusCodes } from 'http-status-codes';
 import { Document, Schema } from 'mongoose';
 import { createServiceError } from './service.base';
@@ -18,7 +19,7 @@ interface DocumentWithToObject {
 }
 
 const DEFAULT_SEPARATOR = '.';
-const DEFAULT_MAX_DEPTH = 10;
+const DEFAULT_MAX_DEPTH = 2;
 const MAX_KEY_LENGTH = 100;
 const MAX_NUMERIC_KEY = 4294967295;
 
@@ -402,7 +403,8 @@ export const parseFieldSelection = (
   const fields = fieldsParam
     .split(',')
     .map((field) => field.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((field) => toSnakeCase(field));
   if (allowedFields) {
     validateFieldSelection(fields, allowedFields, entityName);
   }
