@@ -1,4 +1,5 @@
 import { executeServiceOperation } from '@base/service.base';
+import { redisService } from '@config';
 import { OperatorModel } from '@modules/operator/model.operator';
 import { ResultModel } from '@modules/result/model.result';
 import {
@@ -13,13 +14,16 @@ import type { WebSocketCacheInfo } from './types.websocket';
 type FetchOptions = 'operators' | 'results' | 'both';
 
 const CACHE_TTL_MS = 30 * 1000;
+const CACHE_KEY_PREFIX = 'websocket:stats';
 
 export class WebSocketService {
   private static instance: WebSocketService | null = null;
-  private statsCache: WebSocketStatsData | null = null;
-  private lastCacheUpdate = 0;
+  private fallbackCache: WebSocketStatsData | null = null;
+  private lastFallbackUpdate = 0;
 
-  private constructor() {}
+  private constructor() {
+    this.initializeRedis();
+  }
 
   public static getInstance(): WebSocketService {
     if (!WebSocketService.instance) {
@@ -28,15 +32,26 @@ export class WebSocketService {
     return WebSocketService.instance;
   }
 
+  private async initializeRedis(): Promise<void> {
+    try {
+      await redisService.connect();
+    } catch (error) {
+      console.warn('Redis connection failed, falling back to memory cache:', error);
+    }
+  }
+
   public getAggregatedStats = async (topProductsLimit = 1, forceRefresh = false): Promise<WebSocketStatsData> => {
     return executeServiceOperation(
       async () => {
-        if (this.shouldUseCachedData(forceRefresh)) {
-          return this.statsCache || DEFAULT_WEBSOCKET_STATS;
+        if (!forceRefresh) {
+          const cachedData = await this.getCachedData();
+          if (cachedData) {
+            return cachedData;
+          }
         }
 
         const statsData = await this.fetchAndGenerateStats('both', topProductsLimit);
-        this.updateCache(statsData);
+        await this.setCachedData(statsData);
 
         return statsData;
       },
@@ -88,7 +103,6 @@ export class WebSocketService {
     return executeServiceOperation(
       async () => {
         const { stats } = await this.fetchAndGenerateStats('both');
-
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { topOperators, topProducts, products, ...globalStats } = stats;
         return globalStats;
@@ -99,21 +113,50 @@ export class WebSocketService {
     );
   };
 
-  public clearCache = (): void => {
-    if (this.statsCache !== null) {
-      this.statsCache = null;
-      this.lastCacheUpdate = 0;
+  public clearCache = async (): Promise<void> => {
+    try {
+      if (redisService.getConnectionStatus()) {
+        await redisService.del(CACHE_KEY_PREFIX);
+      }
+    } catch (error) {
+      console.warn('Failed to clear Redis cache:', error);
     }
+
+    this.fallbackCache = null;
+    this.lastFallbackUpdate = 0;
   };
 
-  public getCacheInfo = (): WebSocketCacheInfo => {
+  public getCacheInfo = async (): Promise<WebSocketCacheInfo> => {
+    const isRedisConnected = redisService.getConnectionStatus();
+
+    if (isRedisConnected) {
+      try {
+        const exists = await redisService.exists(CACHE_KEY_PREFIX);
+        const ttl = exists ? await redisService.ttl(CACHE_KEY_PREFIX) : -1;
+        const cache_age = ttl > 0 ? (CACHE_TTL_MS / 1000 - ttl) * 1000 : 0;
+
+        return {
+          is_cached: exists,
+          cache_age,
+          is_expired: ttl <= 0 && exists,
+          ttl: CACHE_TTL_MS,
+          cache_type: 'redis',
+          redis_connected: true,
+        };
+      } catch (error) {
+        console.warn('Failed to get Redis cache info:', error);
+      }
+    }
+
     const now = Date.now();
-    const cache_age = this.statsCache ? now - this.lastCacheUpdate : 0;
+    const cache_age = this.fallbackCache ? now - this.lastFallbackUpdate : 0;
     return {
-      is_cached: this.statsCache !== null,
+      is_cached: this.fallbackCache !== null,
       cache_age,
       is_expired: cache_age > CACHE_TTL_MS,
       ttl: CACHE_TTL_MS,
+      cache_type: 'memory',
+      redis_connected: isRedisConnected,
     };
   };
 
@@ -150,14 +193,44 @@ export class WebSocketService {
     return requiredKeys.every((key) => key in stats);
   };
 
-  private shouldUseCachedData = (forceRefresh: boolean): boolean => {
-    return !forceRefresh && this.statsCache !== null && Date.now() - this.lastCacheUpdate < CACHE_TTL_MS;
-  };
+  private async getCachedData(): Promise<WebSocketStatsData | null> {
+    if (redisService.getConnectionStatus()) {
+      try {
+        const cachedString = await redisService.get(CACHE_KEY_PREFIX);
+        if (cachedString) {
+          const cachedData = JSON.parse(cachedString) as WebSocketStatsData;
+          if (WebSocketService.isValidStatsData(cachedData)) {
+            return cachedData;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to get data from Redis cache:', error);
+      }
+    }
 
-  private updateCache = (statsData: WebSocketStatsData): void => {
-    this.statsCache = statsData;
-    this.lastCacheUpdate = Date.now();
-  };
+    if (this.fallbackCache && this.shouldUseFallbackCache()) {
+      return this.fallbackCache;
+    }
+
+    return null;
+  }
+
+  private async setCachedData(statsData: WebSocketStatsData): Promise<void> {
+    if (redisService.getConnectionStatus()) {
+      try {
+        await redisService.set(CACHE_KEY_PREFIX, JSON.stringify(statsData), CACHE_TTL_MS);
+      } catch (error) {
+        console.warn('Failed to cache data in Redis:', error);
+      }
+    }
+
+    this.fallbackCache = statsData;
+    this.lastFallbackUpdate = Date.now();
+  }
+
+  private shouldUseFallbackCache(): boolean {
+    return this.fallbackCache !== null && Date.now() - this.lastFallbackUpdate < CACHE_TTL_MS;
+  }
 
   private fetchAndGenerateStats = async (option: FetchOptions, topProductsLimit = 0): Promise<WebSocketStatsData> => {
     const fetchOperators = option === 'operators' || option === 'both';

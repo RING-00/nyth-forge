@@ -78,6 +78,8 @@ export interface WebSocketCacheInfo {
   readonly cache_age: number;
   readonly is_expired: boolean;
   readonly ttl: number;
+  readonly cache_type: 'memory' | 'redis';
+  readonly redis_connected?: boolean;
 }
 
 export const WEBSOCKET_EVENTS = {

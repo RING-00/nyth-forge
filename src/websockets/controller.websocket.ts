@@ -32,9 +32,9 @@ export class WebSocketController {
 
   private getStatus = () =>
     this.handleRequest(
-      () => {
+      async () => {
         const timestamp = new Date().toISOString();
-        const cache_info = this.webSocketService.getCacheInfo();
+        const cache_info = await this.webSocketService.getCacheInfo();
         return {
           connected_clients: this.webSocketHandler.getConnectedClientsCount(),
           uptime: formatUptime(process.uptime()),
@@ -43,6 +43,8 @@ export class WebSocketController {
             status: cache_info.is_cached ? 'cached' : 'empty',
             age: cache_info.cache_age,
             is_expired: cache_info.is_expired,
+            type: cache_info.cache_type,
+            redis_connected: cache_info.redis_connected,
           },
         };
       },
@@ -71,7 +73,7 @@ export class WebSocketController {
       async () => {
         const timestamp = new Date().toISOString();
         const stats = await this.webSocketService.getAggregatedStats(1, true);
-        const cache_info = this.webSocketService.getCacheInfo();
+        const cache_info = await this.webSocketService.getCacheInfo();
         return {
           ...stats,
           timestamp,
@@ -88,9 +90,9 @@ export class WebSocketController {
 
   private getCacheInfo = () =>
     this.handleRequest(
-      () => {
+      async () => {
         const timestamp = new Date().toISOString();
-        const cache_info = this.webSocketService.getCacheInfo();
+        const cache_info = await this.webSocketService.getCacheInfo();
         return {
           ...cache_info,
           timestamp,
@@ -105,8 +107,8 @@ export class WebSocketController {
 
   private clearCache = () =>
     this.handleRequest(
-      () => {
-        this.webSocketService.clearCache();
+      async () => {
+        await this.webSocketService.clearCache();
         this.webSocketHandler.resetEventTime();
         return { cleared: true };
       },
