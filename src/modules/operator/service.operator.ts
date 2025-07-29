@@ -32,18 +32,11 @@ interface RecalculationResult {
   operators: (OperatorDocument | { operator_id: Types.ObjectId; operator_name: string; error: string })[];
 }
 
-interface StatsCacheEntry {
-  stats: OperatorStats;
-  timestamp: number;
-}
-
-const CACHE_TTL_MS = 5 * 60 * 1000;
 const THROTTLE_DELAY_MS = 1000;
 const DEFAULT_OPERATOR_LIMIT = 10;
 
 export class OperatorService extends MongoService<OperatorDocument> {
   private static instance: OperatorService | null = null;
-  private statsCache = new Map<string, StatsCacheEntry>();
   private updateThrottleMap = new Map<string, NodeJS.Timeout>();
   private eventListenersInitialized = false;
 
@@ -204,19 +197,12 @@ export class OperatorService extends MongoService<OperatorDocument> {
   calculateOperatorStats = async (operatorId: string): Promise<OperatorStats> => {
     return executeServiceOperation(
       async () => {
-        const cached = this.statsCache.get(operatorId);
-        if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-          return cached.stats;
-        }
-
         const { ResultModel } = await import('@modules/result/model.result');
         const results = await ResultModel.find({
           operator_id: toObjectId(operatorId),
         }).lean<ResultData[]>();
 
         const stats = results.length > 0 ? calculateOperatorStatsFromResults(results) : getDefaultOperatorStats();
-        this.statsCache.set(operatorId, { stats, timestamp: Date.now() });
-
         return stats;
       },
       'Failed to calculate operator statistics',
@@ -229,7 +215,6 @@ export class OperatorService extends MongoService<OperatorDocument> {
     return executeServiceOperation(
       async () => {
         const stats = await this.calculateOperatorStats(operatorId);
-        this.clearStatsCache(operatorId);
 
         const updatedOperator = await this.update({ _id: toObjectId(operatorId) }, { stats });
         if (!updatedOperator) {
@@ -248,7 +233,6 @@ export class OperatorService extends MongoService<OperatorDocument> {
   recalculateAllOperatorStats = async (): Promise<RecalculationResult> => {
     return executeServiceOperation(
       async () => {
-        this.statsCache.clear();
         const operators = await this.findAll({});
         if (operators.length === 0) {
           return { updated_operators: 0, operators: [] };
@@ -278,14 +262,6 @@ export class OperatorService extends MongoService<OperatorDocument> {
       'Failed to recalculate all operator statistics',
       'OPERATION_FAILED' as ErrorCode,
     );
-  };
-
-  clearStatsCache = (operatorId?: string): void => {
-    if (operatorId) {
-      this.statsCache.delete(operatorId);
-    } else {
-      this.statsCache.clear();
-    }
   };
 
   getTopPerformingOperators = async (limit = DEFAULT_OPERATOR_LIMIT): Promise<OperatorDocument[]> => {
@@ -364,8 +340,6 @@ export class OperatorService extends MongoService<OperatorDocument> {
       if (this.updateThrottleMap.has(operatorId)) {
         clearTimeout(this.updateThrottleMap.get(operatorId));
       }
-
-      this.clearStatsCache(operatorId);
 
       const timeout = setTimeout(() => {
         void (async () => {
