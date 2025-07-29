@@ -1,6 +1,7 @@
 import { createServiceError, errorResponse } from '@base/service.base';
 import type { ErrorCode } from '@types';
 import { Elysia, type Context } from 'elysia';
+import { ip } from 'elysia-ip';
 import { StatusCodes } from 'http-status-codes';
 
 export interface ApiKeyOptions {
@@ -34,12 +35,23 @@ const getApiKeyFromEnv = (): string => {
 };
 
 const isWhitelistedPath = (path: string, method: string): boolean => {
-  const staticAssetExtensions = ['.gif', '.png', '.jpg', '.jpeg', '.svg', '.css', '.js', '.ico', '.woff', '.woff2', '.ttf', '.eot'];
-  const hasStaticExtension = staticAssetExtensions.some(ext => path.toLowerCase().endsWith(ext));
-  
-  return DEFAULT_WHITELIST_PATHS.includes(path) || 
-         (path === '/' && method === 'GET') || 
-         hasStaticExtension;
+  const staticAssetExtensions = [
+    '.gif',
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.svg',
+    '.css',
+    '.js',
+    '.ico',
+    '.woff',
+    '.woff2',
+    '.ttf',
+    '.eot',
+  ];
+  const hasStaticExtension = staticAssetExtensions.some((ext) => path.toLowerCase().endsWith(ext));
+
+  return DEFAULT_WHITELIST_PATHS.includes(path) || (path === '/' && method === 'GET') || hasStaticExtension;
 };
 
 export const createApiKeyMiddleware = (options: ApiKeyOptions = {}) => {
@@ -52,33 +64,35 @@ export const createApiKeyMiddleware = (options: ApiKeyOptions = {}) => {
 
   const validApiKey = getApiKeyFromEnv();
 
-  return new Elysia({ name: 'api-key-middleware' }).onBeforeHandle({ as: 'global' }, (context) => {
-    try {
-      const { request, headers } = context;
-      const url = new URL(request.url);
-      const path = url.pathname;
+  return new Elysia({ name: 'api-key-middleware' })
+    .use(ip())
+    .onBeforeHandle({ as: 'global' }, (context) => {
+      try {
+        const { request, headers, ip } = context;
+        const url = new URL(request.url);
+        const path = url.pathname;
 
-      if (fullOptions.exclude(path, request.method)) {
-        return;
+        if (fullOptions.exclude(path, request.method)) {
+          return;
+        }
+
+        if (!validApiKey) {
+          return handleUnauthorizedAccess(context, fullOptions, 'API key not configured', ip);
+        }
+
+        const providedApiKey = extractApiKey(headers, fullOptions.headerName, url.searchParams);
+
+        if (!providedApiKey) {
+          return handleUnauthorizedAccess(context, fullOptions, 'API key missing', ip);
+        }
+
+        if (providedApiKey !== validApiKey) {
+          return handleUnauthorizedAccess(context, fullOptions, 'API key invalid', ip);
+        }
+      } catch (error) {
+        return handleInternalError(error, context.set);
       }
-
-      if (!validApiKey) {
-        return handleUnauthorizedAccess(context, fullOptions, 'API key not configured');
-      }
-
-      const providedApiKey = extractApiKey(headers, fullOptions.headerName);
-
-      if (!providedApiKey) {
-        return handleUnauthorizedAccess(context, fullOptions, 'API key missing');
-      }
-
-      if (providedApiKey !== validApiKey) {
-        return handleUnauthorizedAccess(context, fullOptions, 'API key invalid');
-      }
-    } catch (error) {
-      return handleInternalError(error, context.set);
-    }
-  });
+    });
 };
 
 export const apiKeyHandler = createApiKeyMiddleware({
@@ -88,34 +102,34 @@ export const apiKeyHandler = createApiKeyMiddleware({
 
 export default apiKeyHandler;
 
-const getClientIp = (headers: Record<string, string | undefined>): string => {
-  return (
-    headers['x-forwarded-for'] || headers['x-real-ip'] || headers['x-client-ip'] || headers['host'] || 'unknown-ip'
-  );
-};
+
 
 const extractApiKey = (
-  headers: Record<string, string | undefined>, 
-  headerName: string
+  headers: Record<string, string | undefined>,
+  headerName: string,
+  searchParams?: URLSearchParams,
 ): string | undefined => {
   const authHeader = headers.authorization || headers[headerName.toLowerCase()];
-
-  if (!authHeader) {
-    return undefined;
+  if (authHeader) {
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    return bearerMatch ? bearerMatch[1] : authHeader;
   }
 
-  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-  return bearerMatch ? bearerMatch[1] : authHeader;
+  if (searchParams) {
+    return searchParams.get('api_key') || searchParams.get('apiKey') || undefined;
+  }
+
+  return undefined;
 };
 
 const handleUnauthorizedAccess = (
   context: Context,
   options: Required<ApiKeyOptions>,
   reason: string,
+  ip: string,
 ): ReturnType<typeof errorResponse> => {
   const { request, set, headers } = context;
   const path = new URL(request.url).pathname;
-  const ip = getClientIp(headers);
 
   console.warn(`Unauthorized access attempt: ${reason}`, {
     ip,
