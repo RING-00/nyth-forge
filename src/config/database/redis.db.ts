@@ -116,6 +116,21 @@ export class RedisService {
     await client.flushAll();
   }
 
+  public async keys(pattern: string = '*'): Promise<string[]> {
+    const client = this.ensureConnection();
+    return await client.keys(pattern);
+  }
+
+  public async type(key: string): Promise<string> {
+    const client = this.ensureConnection();
+    return await client.type(key);
+  }
+
+  public async getRawValue(key: string): Promise<string | null> {
+    const client = this.ensureConnection();
+    return await client.get(key);
+  }
+
   public getConnectionStatus(): boolean {
     return this.isConnected;
   }
