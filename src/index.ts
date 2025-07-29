@@ -1,6 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import {
+  apiKeyHandler,
+  camelCaseHandler,
+  connectToDatabase,
+  healthCheckRoute,
+  redisService,
+  snakeCaseHandler,
+} from '@config';
 import { cors } from '@elysiajs/cors';
+import { serverTiming } from '@elysiajs/server-timing';
 import { staticPlugin } from '@elysiajs/static';
 import categoryController from '@modules/category/controller.category';
 import operatorController from '@modules/operator/controller.operator';
@@ -8,10 +17,10 @@ import resultController from '@modules/result/controller.result';
 import templateController from '@modules/template/controller.template';
 import { logger } from '@tqman/nice-logger';
 import { miaw } from '@utils';
+import { WebSocketController, type WebSocketConnection } from '@websockets';
 import { config } from 'dotenv';
 import { Elysia } from 'elysia';
-import { apiKeyHandler, camelCaseHandler, connectToDatabase, healthCheckRoute, snakeCaseHandler } from './config';
-import { WebSocketController, type WebSocketConnection } from './websockets';
+import { elysiaHelmet } from 'elysiajs-helmet';
 
 config();
 
@@ -21,6 +30,20 @@ async function startServer() {
   try {
     await connectToDatabase();
 
+    try {
+      await redisService.connect();
+      console.log('Redis connected successfully');
+
+      try {
+        await redisService.flushAll();
+        console.log('Redis cache cleaned up on startup');
+      } catch (error) {
+        console.warn('Failed to clean up Redis cache on startup:', error);
+      }
+    } catch (error) {
+      console.warn('Redis connection failed, continuing with memory cache fallback:', error);
+    }
+
     const wsController = new WebSocketController();
     const wsHandler = wsController.getHandler();
 
@@ -28,22 +51,20 @@ async function startServer() {
     console.log(`Static files path: ${publicPath}`);
     console.log(`Public directory exists: ${fs.existsSync(publicPath)}`);
 
-    const waguriPath = path.join(publicPath, 'waguri.gif');
-    console.log(`Waguri.gif path: ${waguriPath}`);
-    console.log(`Waguri.gif exists: ${fs.existsSync(waguriPath)}`);
-
     const app = new Elysia()
+      .use(
+        logger({
+          mode: 'combined',
+          withTimestamp: false,
+        }),
+      )
+      .use(elysiaHelmet({}))
+      .use(serverTiming())
       .use(cors())
       .use(
         staticPlugin({
           assets: publicPath,
           prefix: '/',
-        }),
-      )
-      .use(
-        logger({
-          mode: 'combined',
-          withTimestamp: false,
         }),
       )
       .use(apiKeyHandler)
@@ -75,48 +96,23 @@ async function startServer() {
             },
           }),
       )
-      .get('/test-image', () => {
-        return new Response('Image test: <img src="/waguri.gif" alt="test" />', {
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-          },
-        });
-      })
-      .get('/waguri.gif', () => {
-        try {
-          const waguriPath = path.join(publicPath, 'waguri.gif');
-          if (fs.existsSync(waguriPath)) {
-            const file = Bun.file(waguriPath);
-            return new Response(file, {
-              headers: {
-                'Content-Type': 'image/gif',
-                'Cache-Control': 'public, max-age=31536000',
-              },
-            });
-          } else {
-            console.error(`Waguri.gif not found at: ${waguriPath}`);
-            return new Response('Image not found', { status: 404 });
-          }
-        } catch (error) {
-          console.error('Error serving waguri.gif:', error);
-          return new Response('Internal server error', { status: 500 });
-        }
-      })
       .get('/favicon.ico', () => new Response(null, { status: 204 }))
       .listen(3000);
 
     console.log(`Forge is running at ${app.server?.hostname}:${app.server?.port}`);
     console.log(`WebSocket available at ws://${app.server?.hostname}:${app.server?.port}/stats`);
 
-    process.on('SIGINT', () => {
+    process.on('SIGINT', async () => {
       console.log('Shutting down gracefully...');
       wsHandler.cleanup();
+      await redisService.disconnect();
       process.exit(0);
     });
 
-    process.on('SIGTERM', () => {
+    process.on('SIGTERM', async () => {
       console.log('Shutting down gracefully...');
       wsHandler.cleanup();
+      await redisService.disconnect();
       process.exit(0);
     });
   } catch (error) {
