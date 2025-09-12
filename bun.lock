@@ -4,7 +4,7 @@
     "": {
       "name": "nyth-control-api",
       "dependencies": {
-        "@elysiajs/cors": "^1.3.3",
+        "@elysiajs/cors": "^1.4.0",
         "@elysiajs/server-timing": "^1.3.0",
         "@elysiajs/static": "^1.3.0",
         "@tqman/nice-logger": "^1.1.1",
@@ -65,7 +65,7 @@
 
     "@date-vir/duration": ["@date-vir/duration@7.3.2", "", { "dependencies": { "@types/luxon": "^3.6.2", "luxon": "^3.6.1", "type-fest": "^4.41.0" } }, "sha512-F/RvIR2tT7wTsoEM6OQXpZV18KHwPpEhTLFw6lNe3cFRZ7dj5skzQGR9U6y5icQZA50ND762plMk3tk8aBMZAg=="],
 
-    "@elysiajs/cors": ["@elysiajs/cors@1.3.3", "", { "peerDependencies": { "elysia": ">= 1.3.0" } }, "sha512-mYIU6PyMM6xIJuj7d27Vt0/wuzVKIEnFPjcvlkyd7t/m9xspAG37cwNjFxVOnyvY43oOd2I/oW2DB85utXpA2Q=="],
+    "@elysiajs/cors": ["@elysiajs/cors@1.4.0", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-pb0SCzBfFbFSYA/U40HHO7R+YrcXBJXOWgL20eSViK33ol1e20ru2/KUaZYo5IMUn63yaTJI/bQERuQ+77ND8g=="],
 
     "@elysiajs/server-timing": ["@elysiajs/server-timing@1.3.0", "", { "peerDependencies": { "elysia": ">= 1.3.0" } }, "sha512-c5Ay0Va7gIWjJ9CawHx05UtKP6UQVkMKCFnf16eBG0G/GgUkrMMGHWD/duCBaDbeRwbbb7IwHDoaFvStWrB2IQ=="],
 
